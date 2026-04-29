@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sacar Turno - Unión Coop.</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f2f4f3; color: #1a1a1a; min-height: 100vh;
+    }
+    .screen {
+      display: none; min-height: 100vh; padding: 32px 20px 40px;
+      flex-direction: column; align-items: center; justify-content: center;
+    }
+    .screen.active { display: flex; }
+    .screen-top { justify-content: flex-start; padding-top: 80px; }
+
+    .header {
+      position: fixed; top: 0; left: 0; right: 0;
+      background: white; padding: 12px 20px;
+      display: flex; align-items: center; justify-content: space-between;
+      border-bottom: 1px solid #eee; z-index: 100;
+    }
+    .header-hide { display: none; }
+
+    .btn {
+      width: 100%; max-width: 340px; padding: 15px 20px;
+      border: none; border-radius: 14px; font-size: 16px; font-weight: 600;
+      cursor: pointer; transition: transform 0.1s, opacity 0.1s; margin-top: 12px;
+    }
+    .btn:active { transform: scale(0.97); opacity: 0.85; }
+    .btn-primary { background: #2d6a4f; color: white; }
+    .btn-secondary { background: #e8ebe9; color: #2d3830; }
+    .btn-ghost { background: transparent; color: #888; font-size: 14px; font-weight: 500; margin-top: 8px; }
+
+    .welcome-icon { font-size: 72px; margin-bottom: 20px; }
+    .welcome-title { font-size: 26px; font-weight: 800; text-align: center; margin-bottom: 10px; }
+    .welcome-sub { font-size: 15px; color: #666; text-align: center; line-height: 1.6; margin-bottom: 36px; max-width: 300px; }
+
+    .spinner {
+      width: 48px; height: 48px; border: 5px solid #e0e0e0; border-top-color: #2d6a4f;
+      border-radius: 50%; animation: spin 0.8s linear infinite; margin-bottom: 20px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .gps-title { font-size: 18px; font-weight: 700; margin-bottom: 8px; }
+    .gps-sub { font-size: 14px; color: #888; }
+
+    .error-icon { font-size: 64px; margin-bottom: 20px; }
+    .error-title { font-size: 20px; font-weight: 700; margin-bottom: 10px; text-align: center; }
+    .error-msg { font-size: 14px; color: #666; text-align: center; line-height: 1.5; margin-bottom: 28px; max-width: 300px; }
+
+    .form-card {
+      background: white; border-radius: 18px; padding: 24px 20px;
+      width: 100%; max-width: 380px; box-shadow: 0 2px 16px rgba(0,0,0,0.07);
+    }
+    .form-title { font-size: 18px; font-weight: 800; margin-bottom: 6px; }
+    .form-sub { font-size: 13px; color: #888; margin-bottom: 22px; }
+    .field { margin-bottom: 16px; }
+    .field label {
+      display: block; font-size: 11px; font-weight: 700; color: #888;
+      text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 6px;
+    }
+    .field input, .field select {
+      width: 100%; padding: 13px 14px; border: 1.5px solid #e5e5e5;
+      border-radius: 12px; font-size: 15px; background: white; color: #1a1a1a;
+      appearance: none; -webkit-appearance: none;
+    }
+    .field input:focus, .field select:focus {
+      outline: none; border-color: #2d6a4f; box-shadow: 0 0 0 3px rgba(45,106,79,0.1);
+    }
+    .field-patente input { text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600; font-size: 16px; }
+    .select-wrap { position: relative; }
+    .select-wrap::after {
+      content: '▾'; position: absolute; right: 14px; top: 50%;
+      transform: translateY(-50%); pointer-events: none; color: #888;
+    }
+    .form-alert {
+      background: #fff3cd; border: 1.5px solid #ffc107; border-radius: 10px;
+      padding: 11px 14px; font-size: 13px; color: #7a5900; margin-bottom: 14px; display: none;
+    }
+
+    .turno-header { text-align: center; margin-bottom: 24px; }
+    .turno-label {
+      font-size: 11px; font-weight: 700; color: #888;
+      text-transform: uppercase; letter-spacing: 0.1em; margin-bottom: 4px;
+    }
+    .turno-numero { font-size: 88px; font-weight: 900; line-height: 1; color: #2d6a4f; letter-spacing: -2px; }
+    .posicion-card {
+      background: white; border-radius: 16px; padding: 20px 24px;
+      text-align: center; width: 100%; max-width: 340px;
+      box-shadow: 0 2px 14px rgba(0,0,0,0.07); margin-bottom: 16px;
+    }
+    .posicion-num { font-size: 38px; font-weight: 900; color: #1a1a1a; }
+    .posicion-text { font-size: 14px; color: #888; margin-top: 4px; }
+    .posicion-proximo { color: #2d6a4f; }
+
+    .datos-resumen {
+      background: white; border-radius: 14px; padding: 16px 18px;
+      width: 100%; max-width: 340px; margin-bottom: 20px; box-shadow: 0 1px 8px rgba(0,0,0,0.06);
+    }
+    .datos-row {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 7px 0; border-bottom: 1px solid #f5f5f5;
+    }
+    .datos-row:last-child { border-bottom: none; }
+    .datos-key { font-size: 12px; color: #aaa; }
+    .datos-val { font-size: 13px; font-weight: 600; }
+
+    .atendido-card {
+      background: #d8f3dc; border-radius: 16px; padding: 28px 24px;
+      text-align: center; width: 100%; max-width: 340px;
+    }
+    .atendido-icon { font-size: 48px; margin-bottom: 12px; }
+    .atendido-title { font-size: 18px; font-weight: 700; color: #1b4332; margin-bottom: 6px; }
+    .atendido-sub { font-size: 14px; color: #40916c; }
+
+    .badge-demo {
+      font-size: 10px; background: #fff3cd; color: #7a5900;
+      padding: 3px 9px; border-radius: 20px; font-weight: 700; display: none;
+    }
+    .badge-live {
+      font-size: 10px; background: #d8f3dc; color: #1b4332;
+      padding: 3px 9px; border-radius: 20px; font-weight: 700;
+      display: flex; align-items: center; gap: 4px;
+    }
+    .live-dot {
+      width: 6px; height: 6px; border-radius: 50%; background: #2d6a4f;
+      animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  </style>
+</head>
+<body>
+
+<!-- ====== CONFIGURACIÓN — reemplazar con tus datos de Supabase ====== -->
+<script>
+  const SUPABASE_URL  = 'https://xilyipodjseyecsdiwok.supabase.co';   // ej: https://abcxyz.supabase.co
+  const SUPABASE_KEY  = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpbHlpcG9kanNleWVjc2Rpd29rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MzYyMDQsImV4cCI6MjA5MzAxMjIwNH0.h1XqTnU4IhOCl0M9s4jwfDYaa016O827lqTnA5aTMJ8'; // clave anon/public
+
+  const CONFIG = {
+    coop_lat:     -32.6311,  // ← Reemplazar con latitud real de la coop
+    coop_lng:     -62.4838,  // ← Reemplazar con longitud real de la coop
+    radio_metros: 500,
+    mi_turno_key: 'turnero_mi_turno_id',
+  };
+</script>
+<!-- ================================================================== -->
+
+<!-- HEADER -->
+<div class="header header-hide" id="header">
+  <img src="data:image/jpeg;base64,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"
+       alt="Unión Coop." style="height:36px; border-radius:6px;">
+  <div id="statusBadge" class="badge-live"><span class="live-dot"></span> EN VIVO</div>
+</div>
+
+<!-- PANTALLA 1: BIENVENIDA -->
+<div class="screen active" id="screenWelcome">
+  <div class="welcome-icon">🚛</div>
+  <h1 class="welcome-title">Sistema de Turnos</h1>
+  <p class="welcome-sub">Pedí tu turno para ingresar a balanza. Verificaremos que estés en la playa antes de anotarte.</p>
+  <button class="btn btn-primary" onclick="verificarUbicacion()">📍 Obtener mi turno</button>
+  <button class="btn btn-ghost" onclick="activarModoDemo()">Modo demo (sin GPS)</button>
+</div>
+
+<!-- PANTALLA 2: GPS -->
+<div class="screen" id="screenGPS">
+  <div class="spinner"></div>
+  <p class="gps-title">Verificando ubicación...</p>
+  <p class="gps-sub">Permitı́ el acceso al GPS cuando te lo pida</p>
+</div>
+
+<!-- PANTALLA 3: ERROR GPS -->
+<div class="screen" id="screenError">
+  <div class="error-icon">📍</div>
+  <h2 class="error-title">No estás en la playa</h2>
+  <p class="error-msg" id="errorMsg">Solo podés sacar turno si estás físicamente en la cooperativa.</p>
+  <button class="btn btn-primary" onclick="verificarUbicacion()">Intentar de nuevo</button>
+  <button class="btn btn-secondary" onclick="showScreen('screenWelcome')">Volver</button>
+</div>
+
+<!-- PANTALLA 4: FORMULARIO -->
+<div class="screen screen-top" id="screenForm">
+  <div class="form-card">
+    <h2 class="form-title">Tus datos</h2>
+    <p class="form-sub">Completá el formulario para sacar tu turno</p>
+    <div class="field field-patente">
+      <label>Patente</label>
+      <input type="text" id="patente" placeholder="ABC123" maxlength="10" autocomplete="off" autocapitalize="characters">
+    </div>
+    <div class="field">
+      <label>Origen</label>
+      <input type="text" id="origen" placeholder="Ciudad o localidad" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>CPE</label>
+      <input type="text" id="cpe" placeholder="Número de CPE" inputmode="numeric" autocomplete="off">
+    </div>
+    <div class="field">
+      <label>Producto</label>
+      <div class="select-wrap">
+        <select id="producto">
+          <option value="">Seleccionar...</option>
+          <option>Maíz</option>
+          <option>Soja</option>
+          <option>Trigo</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-alert" id="formAlert"></div>
+    <button class="btn btn-primary" style="margin-top:4px" onclick="registrar()">Confirmar y sacar turno</button>
+  </div>
+</div>
+
+<!-- PANTALLA 5: MI TURNO -->
+<div class="screen screen-top" id="screenTurno">
+  <div class="turno-header">
+    <p class="turno-label">Tu número de turno</p>
+    <div class="turno-numero" id="miNumero">—</div>
+  </div>
+  <div class="posicion-card">
+    <div class="posicion-num" id="posicionNum">—</div>
+    <div class="posicion-text" id="posicionText">actualizando...</div>
+  </div>
+  <div class="datos-resumen">
+    <div class="datos-row"><span class="datos-key">Patente</span><span class="datos-val" id="dPatente">—</span></div>
+    <div class="datos-row"><span class="datos-key">Producto</span><span class="datos-val" id="dProducto">—</span></div>
+    <div class="datos-row"><span class="datos-key">Origen</span><span class="datos-val" id="dOrigen">—</span></div>
+    <div class="datos-row"><span class="datos-key">CPE</span><span class="datos-val" id="dCpe">—</span></div>
+  </div>
+  <button class="btn btn-secondary" onclick="actualizarPosicion()" style="max-width:340px">🔄 Actualizar posición</button>
+</div>
+
+<!-- PANTALLA 6: ATENDIDO -->
+<div class="screen" id="screenAtendido">
+  <div class="atendido-card">
+    <div class="atendido-icon">✅</div>
+    <h2 class="atendido-title">¡Listo, gracias!</h2>
+    <p class="atendido-sub">Tu turno fue procesado. Si volvés con otra carga, podés sacar un nuevo turno.</p>
+  </div>
+  <button class="btn btn-secondary" style="margin-top:24px" onclick="nuevoTurno()">Sacar otro turno</button>
+</div>
+
+<script>
+  // ========== INIT SUPABASE ==========
+  const { createClient } = supabase;
+  const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let miTurnoId   = null;
+  let modoDemo    = false;
+  let eraProximo  = false;
+  let realtimeSub = null;
+
+  // ========== GEOLOCALIZACIÓN ==========
+  function distanciaMetros(lat1, lng1, lat2, lng2) {
+    const R = 6371000;
+    const φ1 = lat1 * Math.PI / 180, φ2 = lat2 * Math.PI / 180;
+    const Δφ = (lat2 - lat1) * Math.PI / 180;
+    const Δλ = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(Δφ/2)**2 + Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function verificarUbicacion() {
+    showScreen('screenGPS');
+    if (!navigator.geolocation) { showError('Tu dispositivo no soporta GPS.'); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const dist = distanciaMetros(pos.coords.latitude, pos.coords.longitude, CONFIG.coop_lat, CONFIG.coop_lng);
+        if (dist <= CONFIG.radio_metros) { showScreen('screenForm'); }
+        else {
+          const d = dist >= 1000 ? (dist/1000).toFixed(1)+' km' : Math.round(dist)+' metros';
+          showError(`Estás a ${d} de la cooperativa. Tenés que estar dentro de los ${CONFIG.radio_metros}m.`);
+        }
+      },
+      () => showError('No pudimos obtener tu ubicación. Activá el GPS e intentá de nuevo.'),
+      { enableHighAccuracy: true, timeout: 12000 }
+    );
+  }
+
+  function activarModoDemo() {
+    modoDemo = true;
+    showScreen('screenForm');
+  }
+
+  function showError(msg) {
+    document.getElementById('errorMsg').textContent = msg;
+    showScreen('screenError');
+  }
+
+  // ========== REGISTRO ==========
+  async function registrar() {
+    const patente  = document.getElementById('patente').value.trim().toUpperCase();
+    const origen   = document.getElementById('origen').value.trim();
+    const cpe      = document.getElementById('cpe').value.trim();
+    const producto = document.getElementById('producto').value;
+
+    if (!patente || !origen || !cpe || !producto) {
+      mostrarAlerta('Completá todos los campos antes de continuar.');
+      return;
+    }
+
+    const btn = document.querySelector('#screenForm .btn-primary');
+    btn.textContent = 'Anotando...';
+    btn.disabled = true;
+
+    try {
+      // Verificar patente duplicada
+      const { data: existente } = await db.from('turnos')
+        .select('numero').eq('patente', patente).eq('estado', 'esperando').maybeSingle();
+      if (existente) {
+        mostrarAlerta(`La patente ${patente} ya tiene el turno #${existente.numero} activo.`);
+        btn.textContent = 'Confirmar y sacar turno'; btn.disabled = false;
+        return;
+      }
+
+      // Obtener siguiente número
+      const { data: ultimo } = await db.from('turnos')
+        .select('numero').order('numero', { ascending: false }).limit(1);
+      const numero = ultimo?.length ? ultimo[0].numero + 1 : 1;
+
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+      const { data, error } = await db.from('turnos')
+        .insert([{ id, numero, patente, origen, cpe, producto, estado: 'esperando', timestamp: Date.now() }])
+        .select().single();
+
+      if (error) throw error;
+
+      miTurnoId = data.id;
+      localStorage.setItem(CONFIG.mi_turno_key, data.id);
+      mostrarTurno(data);
+
+    } catch(e) {
+      mostrarAlerta('Error al anotarse. Verificá tu conexión e intentá de nuevo.');
+      console.error(e);
+    }
+
+    btn.textContent = 'Confirmar y sacar turno'; btn.disabled = false;
+  }
+
+  function mostrarAlerta(msg) {
+    const el = document.getElementById('formAlert');
+    el.textContent = msg; el.style.display = 'block';
+  }
+
+  // ========== MI TURNO ==========
+  function mostrarTurno(turno) {
+    document.getElementById('miNumero').textContent  = turno.numero;
+    document.getElementById('dPatente').textContent  = turno.patente;
+    document.getElementById('dProducto').textContent = turno.producto;
+    document.getElementById('dOrigen').textContent   = turno.origen;
+    document.getElementById('dCpe').textContent      = turno.cpe;
+    pedirPermisoNotificaciones();
+    showScreen('screenTurno');
+    actualizarPosicion();
+    suscribirRealtime();
+  }
+
+  async function actualizarPosicion() {
+    if (!miTurnoId) return;
+    const { data } = await db.from('turnos')
+      .select('id, numero').eq('estado', 'esperando').order('numero', { ascending: true });
+
+    const idx = data?.findIndex(t => t.id === miTurnoId) ?? -1;
+
+    if (idx === -1) {
+      if (realtimeSub) db.removeChannel(realtimeSub);
+      showScreen('screenAtendido');
+      return;
+    }
+
+    const pos     = idx + 1;
+    const numEl   = document.getElementById('posicionNum');
+    const txtEl   = document.getElementById('posicionText');
+
+    if (pos === 1) {
+      numEl.textContent = '¡Próximo!';
+      numEl.className   = 'posicion-num posicion-proximo';
+      txtEl.textContent = 'Dirigite a balanza ahora';
+      if (!eraProximo) { notificarProximo(); eraProximo = true; }
+    } else {
+      numEl.textContent = pos;
+      numEl.className   = 'posicion-num';
+      txtEl.textContent = `${idx} camión${idx !== 1 ? 'es' : ''} antes que vos`;
+      eraProximo = false;
+    }
+  }
+
+  function suscribirRealtime() {
+    if (realtimeSub) db.removeChannel(realtimeSub);
+    realtimeSub = db.channel('posicion')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {
+        actualizarPosicion();
+      }).subscribe();
+  }
+
+  function nuevoTurno() {
+    localStorage.removeItem(CONFIG.mi_turno_key);
+    miTurnoId = null; eraProximo = false;
+    document.getElementById('patente').value  = '';
+    document.getElementById('origen').value   = '';
+    document.getElementById('cpe').value      = '';
+    document.getElementById('producto').value = '';
+    document.getElementById('formAlert').style.display = 'none';
+    if (modoDemo) showScreen('screenForm');
+    else showScreen('screenWelcome');
+  }
+
+  // ========== NOTIFICACIONES ==========
+  function pedirPermisoNotificaciones() {
+    if ('Notification' in window && Notification.permission === 'default')
+      Notification.requestPermission();
+  }
+
+  function notificarProximo() {
+    if (!('Notification' in window) || Notification.permission !== 'granted') return;
+    new Notification('🚛 ¡Es tu turno!', {
+      body: 'Dirigite a balanza ahora. Sos el próximo.',
+      requireInteraction: true, tag: 'turno-proximo'
+    });
+    if (navigator.vibrate) navigator.vibrate([300, 100, 300, 100, 300]);
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      [880, 1100, 880].forEach((f, i) => {
+        const o = ctx.createOscillator(), g = ctx.createGain();
+        o.connect(g); g.connect(ctx.destination);
+        o.frequency.value = f; o.type = 'sine';
+        g.gain.setValueAtTime(0.3, ctx.currentTime + i*0.25);
+        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + i*0.25 + 0.2);
+        o.start(ctx.currentTime + i*0.25); o.stop(ctx.currentTime + i*0.25 + 0.25);
+      });
+    } catch(e) {}
+  }
+
+  // ========== NAVEGACIÓN ==========
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    const conHeader = ['screenForm','screenTurno','screenAtendido'].includes(id);
+    document.getElementById('header').className = conHeader ? 'header' : 'header header-hide';
+    window.scrollTo(0, 0);
+  }
+
+  // ========== INICIO ==========
+  window.addEventListener('load', async () => {
+    const savedId = localStorage.getItem(CONFIG.mi_turno_key);
+    if (savedId) {
+      const { data } = await db.from('turnos').select('*').eq('id', savedId).maybeSingle();
+      if (data && data.estado === 'esperando') {
+        miTurnoId = savedId;
+        mostrarTurno(data);
+        return;
+      } else if (!data) {
+        // Reset de cola — limpiar turno guardado
+        localStorage.removeItem(CONFIG.mi_turno_key);
+      }
+    }
+    showScreen('screenWelcome');
+  });
+</script>
+</body>
+</html>

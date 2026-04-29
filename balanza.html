@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Balanza - Unión Coop.</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f2f4f3; color: #1a1a1a; min-height: 100vh;
+    }
+
+    /* LOGIN */
+    .login-wrap { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; }
+    .login-card {
+      background:white; border-radius:20px; padding:36px 32px;
+      width:100%; max-width:360px; box-shadow:0 4px 24px rgba(0,0,0,0.08); text-align:center;
+    }
+    .login-icon { font-size:48px; margin-bottom:16px; }
+    .login-title { font-size:22px; font-weight:800; margin-bottom:6px; }
+    .login-sub { font-size:14px; color:#888; margin-bottom:28px; }
+    .pin-display { display:flex; justify-content:center; gap:10px; margin-bottom:24px; }
+    .pin-dot { width:14px; height:14px; border-radius:50%; border:2px solid #ccc; transition:all 0.15s; }
+    .pin-dot.filled { background:#2d6a4f; border-color:#2d6a4f; }
+    .numpad { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+    .numpad-btn {
+      padding:16px; font-size:20px; font-weight:600;
+      background:#f5f5f5; border:none; border-radius:12px; cursor:pointer; transition:background 0.1s;
+    }
+    .numpad-btn:active { background:#e0e0e0; }
+    .numpad-btn.del { font-size:16px; color:#888; }
+    .numpad-btn.empty { visibility:hidden; }
+    .login-error { color:#d62828; font-size:13px; margin-top:14px; display:none; }
+
+    /* APP */
+    #app { display:none; }
+
+    .topbar {
+      background:#2d6a4f; color:white; padding:14px 24px;
+      display:flex; align-items:center; justify-content:space-between;
+    }
+    .topbar-left { display:flex; align-items:center; gap:12px; }
+    .topbar-info div:first-child { font-size:16px; font-weight:700; }
+    .topbar-info div:last-child { font-size:12px; opacity:0.7; }
+
+    .live-badge {
+      display:flex; align-items:center; gap:5px;
+      background:rgba(255,255,255,0.15); border-radius:20px; padding:5px 12px;
+      font-size:12px; font-weight:700;
+    }
+    .live-dot { width:7px; height:7px; border-radius:50%; background:#4ade80; animation:pulse 1.5s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .stats-bar { background:#1b4332; color:white; padding:10px 24px; display:flex; gap:28px; }
+    .stat { text-align:center; }
+    .stat-num { font-size:22px; font-weight:800; }
+    .stat-label { font-size:11px; opacity:0.7; text-transform:uppercase; letter-spacing:0.05em; }
+
+    .toolbar {
+      background:white; border-bottom:1px solid #eee;
+      padding:14px 24px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    }
+    .btn-toolbar {
+      padding:9px 18px; border:none; border-radius:10px;
+      font-size:14px; font-weight:600; cursor:pointer; transition:opacity 0.1s;
+    }
+    .btn-toolbar:active { opacity:0.75; }
+    .btn-siguiente { background:#2d6a4f; color:white; }
+    .btn-reset { background:#fff0f0; color:#c62828; border:1.5px solid #ffcdd2; }
+
+    .queue-container { padding:20px 24px; max-width:900px; margin:0 auto; }
+    .queue-empty { text-align:center; padding:60px 20px; color:#aaa; }
+    .queue-empty-icon { font-size:48px; margin-bottom:12px; }
+
+    .turno-card {
+      background:white; border-radius:14px; padding:16px 20px; margin-bottom:10px;
+      display:flex; align-items:center; gap:16px;
+      box-shadow:0 1px 6px rgba(0,0,0,0.05); border-left:4px solid transparent;
+      transition:box-shadow 0.15s;
+    }
+    .turno-card:hover { box-shadow:0 3px 14px rgba(0,0,0,0.1); }
+    .turno-card.primero { border-left-color:#2d6a4f; background:#f6fbf8; }
+
+    .turno-num { font-size:28px; font-weight:900; color:#1a1a1a; min-width:52px; text-align:center; }
+    .turno-card.primero .turno-num { color:#2d6a4f; }
+    .turno-info { flex:1; min-width:0; }
+    .turno-patente { font-size:18px; font-weight:700; letter-spacing:0.03em; margin-bottom:4px; }
+
+    .turno-tags { display:flex; flex-wrap:wrap; gap:6px; }
+    .tag { font-size:11px; font-weight:600; padding:3px 9px; border-radius:20px; white-space:nowrap; }
+    .tag-producto { background:#e8f5e9; color:#2e7d32; }
+    .tag-origen   { background:#e3f2fd; color:#1565c0; }
+    .tag-cpe      { background:#f3e5f5; color:#6a1b9a; }
+    .tag-tiempo   { background:#f5f5f5; color:#757575; }
+    .primero-badge {
+      font-size:10px; font-weight:700; color:white;
+      background:#2d6a4f; border-radius:20px; padding:2px 8px; white-space:nowrap;
+    }
+
+    .btn-atender {
+      padding:9px 16px; border:none; border-radius:10px;
+      font-size:13px; font-weight:600; cursor:pointer;
+      background:#2d6a4f; color:white; transition:opacity 0.1s; white-space:nowrap;
+    }
+    .btn-atender:active { opacity:0.75; }
+
+    .modal-overlay {
+      position:fixed; inset:0; background:rgba(0,0,0,0.5);
+      display:none; align-items:center; justify-content:center; z-index:200;
+    }
+    .modal-overlay.active { display:flex; }
+    .modal {
+      background:white; border-radius:18px; padding:32px 28px;
+      max-width:360px; width:90%; text-align:center;
+    }
+    .modal-icon { font-size:44px; margin-bottom:14px; }
+    .modal-title { font-size:20px; font-weight:700; margin-bottom:8px; }
+    .modal-sub { font-size:14px; color:#666; margin-bottom:24px; line-height:1.5; }
+    .modal-btns { display:flex; gap:10px; }
+    .modal-btn { flex:1; padding:13px; border:none; border-radius:12px; font-size:15px; font-weight:600; cursor:pointer; }
+    .modal-cancel  { background:#f0f0f0; color:#1a1a1a; }
+    .modal-confirm { background:#d62828; color:white; }
+
+    .last-update { font-size:12px; color:#aaa; margin-left:auto; }
+  </style>
+</head>
+<body>
+
+<!-- ====== CONFIGURACIÓN — reemplazar con tus datos de Supabase ====== -->
+<script>
+  const SUPABASE_URL = 'https://xilyipodjseyecsdiwok.supabase.co';      // ej: https://abcxyz.supabase.co
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhpbHlpcG9kanNleWVjc2Rpd29rIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc0MzYyMDQsImV4cCI6MjA5MzAxMjIwNH0.h1XqTnU4IhOCl0M9s4jwfDYaa016O827lqTnA5aTMJ8'; // clave anon/public
+  const PIN_CORRECTO = '1234';                  // ← Cambiar este PIN
+</script>
+<!-- ================================================================== -->
+
+<!-- LOGIN -->
+<div class="login-wrap" id="loginWrap">
+  <div class="login-card">
+    <div class="login-icon">⚖️</div>
+    <h1 class="login-title">Panel de Balanza</h1>
+    <p class="login-sub">Ingresá el PIN para acceder</p>
+    <div class="pin-display">
+      <div class="pin-dot" id="dot0"></div>
+      <div class="pin-dot" id="dot1"></div>
+      <div class="pin-dot" id="dot2"></div>
+      <div class="pin-dot" id="dot3"></div>
+    </div>
+    <div class="numpad">
+      <button class="numpad-btn" onclick="addPin('1')">1</button>
+      <button class="numpad-btn" onclick="addPin('2')">2</button>
+      <button class="numpad-btn" onclick="addPin('3')">3</button>
+      <button class="numpad-btn" onclick="addPin('4')">4</button>
+      <button class="numpad-btn" onclick="addPin('5')">5</button>
+      <button class="numpad-btn" onclick="addPin('6')">6</button>
+      <button class="numpad-btn" onclick="addPin('7')">7</button>
+      <button class="numpad-btn" onclick="addPin('8')">8</button>
+      <button class="numpad-btn" onclick="addPin('9')">9</button>
+      <button class="numpad-btn empty"></button>
+      <button class="numpad-btn" onclick="addPin('0')">0</button>
+      <button class="numpad-btn del" onclick="delPin()">⌫</button>
+    </div>
+    <p class="login-error" id="loginError">PIN incorrecto. Intentá de nuevo.</p>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-left">
+      <img src="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wCEAAkGBw8PDRANDQ8NDg0QFRAQDw4ODg8NDQ8QFRUXGBURFRUYHzQgGBolGxMTITEiJSotLi4uFyA3ODMtNygtLysBCgoKDg0OGxAQGy8lICUvLys1LS01LS0tKy0tLy8tLzAtLS0vLS0tLS0tLS0tKy0tLS0tLS0tLS0tLS0tLSstNf/AABEIAOEA4QMBIgACEQEDEQH/xAAcAAEBAAIDAQEAAAAAAAAAAAAAAQIHBAUGAwj/xABLEAACAgEBBAUHBQoNBQEAAAABAgADEQQFEiExBgcTQVEUImFxgZGyMlJzobEVI0JTVGJykpPRFiUmY4Oio8HCw9Lh8DM2Q2SCJP/EABkBAQADAQEAAAAAAAAAAAAAAAABAgMEBf/EACsRAQACAgICAAQEBwAAAAAAAAABAgMREiEEMSIyM0EjUbHwExRCUoGh8f/aAAwDAQACEQMRAD8A8FEASyzzzEREBESwJEsQJEsQhIliBJYiAiWSBIliBIliBIliBIliEpERARiIgMREQEREBLEQgiWIEliICJYgSJYgSJYgJJYgSJ9HpYKrsrBH3txipCvunDbp78GYQJEsQJEskBJLECRLECSSxAkSxAksSwERLAREsCRLECSxEBCgkgAEk4AAGSSeQA7zLNidV3Rjfb7oXr5qkjTKRwLDgbfZyHpye4StrcY2vjpN7ahzth9W9TaFl1eV1loDB1OfJz+CgHJufnePsBmu9t7Iu0WobTahcOvEMOKWL3Op7wf9p+iLHCDHfPKdLdj16+k1vhbVyabccUbwPip4ZH94E56ZZie3bk8eJr8PuP8AbSc9B0K6MttHVbhyumrw19g4eb3VqfnNg+oZM6v7m3eU+Sbh8o3hXufnHvz4Y458OM3f0X2ZXodMmnrwSPOsfGDZYflMfsHoAm2S/GOnNgxc7d+oZbf6MafU6PyPcWpUA7Aqv/RYDCkejuI7xmaK2jobNNc+nvXdtrO6w7j4MD3gjBB9M/SaneHpnhes3oz5RR5XSv8A+igHeAHG2kcSPSV4ke0d8xxX1OpdPkYuUbj3DT0ksTqeekSxAkSxAkkykgSJZIEiWIEliWAiWICJYgIiICIiBytmaJr7lqXv4sfmqOZ/54zcXRLaIWjyY8DSAK/o+4ezl7p4/ofsnc03lDDz7uK+iscvecn3TsgxqsFg7ufpHeJyZb7nT0fHx8a7+8vYXavPfOK1uZwPKM8c8JktmSB4zN0PomgqOoXVlB26qaw/5pP28xnwJna1POEpn1RoIiIdtRbON0g1X3oVKcNZwY+Cd/v5e+fOu0DiTgDiSeQHjNZ7V6f22WuaaqwmSEZyzEoDwOBjGeftlq1m3pTJkrT5nR9Ktk+S6khR95s8+vwHzk9h+oidNO02vt2/Vqq3dnhTvLuJukHGOec4/cJ1c7K7128y81m08fRERJUJJYgSJYgYxLECREQEsksBLEQESxAREQE5OzNEdRqKqF52MFJ8F/Cb2AE+yceev6t9Fvai3UEcKlCL+m/f7FU/rSt51Xa+OvK0Q932KhAigBVAVQOQAGAJ1mspncGcfU1ZE4XruoptwuD3cPZOXsyzfdmPIcB6z/z655vX7Xq7bsazvEZ3nHyAR+DnvPOdvsm3Fa+J84+3/bEtMTHtWton09CJmDOPTbkTi6rbekpOLNRSpHNQ4d/1V4yIjaZmI9uL042l2GgdVOHuPYr44Pyz+qCPbNUz0nTXbVertrFDFqq1PEqyZdjx4HjyCzzk68VdVeZ5F+V+mMS4iaMUiWSAiIgSJYgSSWIEiWIElklgJYiAiJYEliICbQ6vtJubPV8cbnssPqB3B8GfbNYTd2xdJ2Wi01fetVQP6W6M/XmY55606vEjd5lkwmv+lvSk2FtNpWxVystU8bPFVPzfT3+rnyunfSLBbQ6dvRe4P9kD9vu8Z4WRix/eVvIz/wBNX0ofddTywR7u+d5d0lZRu0KPDefj7lE8/E1mkTO5c1ctqxqHL1m0r7uFtrsPm53U/VHCcSIlojSkzM9yREQgjERAkSyYgJJYhKREQEksQJERAREsBEsQERLiEIBLEQKK94hBzbCj1nhNy9O9sjQabFZHlFuUoHzQB51mPBQR7SJqLZxHlFJYgL2lWSeAA3xkmdl0x22ddrrbwT2QPZ0DwqUnBx4k5b2+iZ3rymG+PJwrOvculJJJJJJPEknJJPMkyRE0YEsRAREQJEsQJERAREQGJJYgSJcSQJEsQlIiIQksSwklxEQgmddTNwRWYjmFUsR7phPb9VQzqdR9EvxytrcY2vjrztFXjLKXX5aOueW8rLn3z5zZPWquNPpvpH+Ga2iluUbTlpwtxZIhY4UFj4KCx9wn18kt/FW/s3/dPS9Wen39oFu6uqxs+klVH1M02hfdXXjtLK685xvuqZxzxk8eYlL5eM601xePzrymdNEtprBxNdgHiUYD7J8pvivW0sQqX0sx5KtqFj6gDOr6TdGatZU2EVdSATXaAA293Kx71PplYz99wvbxOt1nbTqKWOFBYnkACSfZM309ijLJYo8WRlHvM7joUpG1dMpBBDWAjvBFT5E951jL/Fj/AKdPxCXtk1aIZUxcqTbfpqadhsnY2o1bbunrLAfKc+bWvrY/ZznH0WksvtSmpd6yw7qr6fE+AAyfZNydHNijR6VNPvB2BLOwGAzseOPRyHsjJk4wYMP8Se/Ty2zer6tcHVWtY3elX3uv1bx4n6p4/pEKBq7K9MgSmo9moBZt4rwZiSck5z7hNx26yhG3HupR/mtait7iZxNpdHtJql++1ISeVtYCWD0hhz9uRMa5Zid2dWTx4muqNKQBk4HEnkBxJnc9KOj9mguCMd+p8mq3GN4Dmp8GGR758+itPabR0qfzqN7F84/DOnlGtw4eE8uMuB5Jb+Kt/Zv+6Q6S38Vb+zf903xayopZ2VFHNmYKo9ZM4/3Q0/5Rp/21f75h/Hn8nX/KR/c0URg4PA+B4GSbz2jsqjV17lyJYjDg3DeHgyt3Gaa23s1tJqrdM5yazwblvIQCre0ETSmSLMMuCcff2cGIiaMDEksQJEuIgYiZCQSwEREBPedUa51Wp+iX454ObA6nMeVanP4pfjlMnyy2wfUhz+t1MafS/SP8E1jNqdcePJtLj8a/wTVcjF8q3k/UlsXqi0mfK7u77zWP6zN9qzjdblo8p0tXelb2Y+kYDP8AZGem6ptME2YbDztusb2KFT7UM8T1oagPtaxR/wCJKa/6u/8A5kpXvLLS3XjxH5/9eTH1+PeJvbopY9uz9LbYSztWpZjzYjhk+nhNFTfPQYD7laP6JftMnP6hHifNLWWwU/lGAPyjV/DbPadZiY2XYfz6fjE8hsD/ALmHh5Tq/hunt+tID7k2Y/GUfGJW3z1Wx/Sv/n9Hl+qbZwazUaojJQJUh8C2S59yr7zOy6zNuWadK9LQxR7gzWOpwy1jgFB7snPH0emYdTl6mvV0n5Qeqz1hlK/4PrnD64dEwu0+pAJrZDST3K6ksB7Qx/VMa3l7InXj9fvtrwiep6A7ds0+rq07MTpr2FZQnIR24Ky+HnYB9c8tO36I6FtRtHS1oDwtrsY/NStg7E+HBcesibWiJjty45mLRptDp/s0XbMvJA3qR26HwKfK96749s191b6ff2pUfmJa/wDVKj63E2n03tSvZWsZiBvUvWP0rPMUe9hPBdT+nDa3UWHklIX2u4/uQzCk/hy7MsROar0PWa+5sxl/GWVJ7jvf4JqHAm0+uO4CjS1A/KsezH6C4/zJqyaYY1Vh5U7yNodU9jvpb62JKV2LuA8QoZckDwGRn3zzfWguNp/0NR+tp6fqbAOn1efxlfwGed61x/Gv9DT9rytfqS0vP4EPGxLJN3GREQEREDETITATIGErERCFno+ge2V0euDWHdqtU1Ox5Jkgqx9GQPYTPORImNxpatprO4b62npKdVSadQgsrbBxkgg9zKRxB9Innv4B7O+bf+2aa50PSDWUKEp1FiIOSndsVfQA4OB6py/4Y7R/KT+x0/8AomEYrx6l1z5GK3dq/o25srS16WhNPQCKk3t0Ft48WLHJ9ZM010p1Ha7Q1VnjbYo9SHdH1KJyf4Y7R/KT+x0/+idJY5ZizHLMSzHxJOSZfHjms7lnmzVvWIrDGbs6GXY2ZpB/Nj7TNJzudJ0n11Na1VagrWg3UXsqWwPDJXMnJSbR0rgyRjncuz2G38ogf/Y1Xw2z2PWRbnZdg/Pp+MTVtO0Lkv8AKkfF+8z9puofObO8cEY/CPd3zlbQ6RazUVmm+42VkglezqXiDkcVUGRbHM2iU1zRFLV/Nn0W222h1a3gFkIKWoObVnGcekEAj1TbzW6bX6bB3NRprR7P3qwPqIM0VOXs/aV+mYtp7XqJ57p81vWp4H2iTkx8u49mHNw6nuGwLurnSlspqNQi/NPZuR6AcfbPRdH9h6bQKRp1O+3y7rDvWsB3E8gPQABNcJ0714GCaG9Jq4/UcTrtp9I9ZqQUuubszzrQCtCPAhflD15lOF56mWsZsNe6x29D1idKV1JGj07b1KNvW2KcrZYOSqe9Rk8e848J2HVKu6mqt+c1SD/5DE/GJrnE7HZm3tXpUNemu7NGO8w7Op8tgDOWUnkBLzj+HjDGub8TnZ6frX1O/qdPX8ytm/XbH+CeGnK2jtG7U2drqH7SzAXe3UXzRnAwoA7zOLLUrxjSmS3K02bK6pbN2jVfSV/CZ0PWe2dp5/mavtedHszbmq0qsumtNYcgsNyt8kcB8oGfDaO0LtTZ2uoftLMBd7dRPNGcDCgDvMrFJi/Je2WJxRRxYiJowSIiAiMxAwlExEsJZAyzGUGELOXs/SrYXaxilVSdpYyrvPjeVQqgnBYs6jiccZxJytBq+yZsotldimu2tiVDoSDwI4ggqpB7iBEphyqdLprWPZnUV11o9tzWdnY24CAAgXGWLMBg+POVNn1XqTpDdvq1SNVeUORY4RWVlHzmUEEfhczMKtfVW2aqH3WVq7ktv7QWVtjzQVUbuCAQfECDtJUQppa2pLNW7WPb21hNbbyKPNAADAHlkkDwkdrdPvXodNZb5LVZebySldrKg09lo4Bd35ShjwByeYyPDLTbMofyere1Av1FfaBgEahCWcDeHyt3zOJzwznunyG1KlsOor0+5qTlg3alqK7DzsSvGQeJIBYgHHhPhftW5qq6FexKkr7I1rY24/nMxJXlx3sY9Ejs3VwgeGZ6C/o6E2eNT2hOqVE1FumwPM0tjMqWeOeAJ9BnSvZWbd8VbtWVPY9oW80Yyu+ePHjx9M9E3TfVNc7WBH0jhkOiwgr7Jl3dwPu73DnmTO/sV4/dj9wNPXu1XHX3as1pa9ei063V0BxlVfPEnBHKfXYfRevUUUtY2rW6622gCqlbKqWQDzrc4KifPR9LQhrts0xfU1qiC+vVXaftUr+QLlThZjA585hpOl9taCvs1NbW6m2+vfYJel/yqiMcMdx5/wB9fiXiabfGnZOlqoS/XX3AWvclKaVEsLLU249pZuG7vchzMavYtWne422WW0omntpendra2u8+axDA45Hh6J89LtmkUrptTpF1NNTWPp83vTbUHOWrLqPOUnB5DjJqekdzvdYv3lrVprTsWasU1VfJrXvIxJ7Ruuv3+/b7rsNN1nC6y5cadkrprXtlW1Xb74MHGNzu55B75w/IqVV7rvKUqFhprqwg1LWKoZ94kYULvL3E+cOHOfPTbSASxL0tu7R0sLi812byBhxJU54OfdFevr3Xqelm07N2iL22Lqn3QpYWbuDkAZBXuHhHaN1RtNU1d9tRtC1djurZuFiXJByV8MSV7OLrpuzObNQ9lYB4KpUqAc+HnEn1S1a6pTYgpbye1VV6zdmzeVt5bFcLwIPdjGCZ9k2z2ZXsKggrrsrp32FrI1h++WtlcMxXK4wAAR4cZ7R0zOyqzrKaa7GfTX4au4AB2TiG4cgQysPdLp9lVXdi1ZvrSyx6itwQvla9/eUjgw7jw4ZHjMKNvWA0s6o7UWGyplVKN0MuGTCKBxIU55jHpmFO27AaXtDX20F9yx7GLmtgc1sTnOCcg92SPVHafhY7O2YLqHsLFbDvLp6wM9s6J2lq+jCYx4lgJ1uZ2dW3Lq1pWjs61oA3M1VWt2md5rN5lyCW7geAA8JwNTYrWO6IK1ZmZawd4ICchQfAcpMbVnWunzkiJKpITEkBLJEJYCZTATKBlEksCyzGWELEZiBYkiBYkzLmBYkzGYFiTejMCxJmMwERmSBYkiAiJMwKTJJEBJEkJWJIgYTIGYxAzEswBmWYFlkiBZZIgWMRGYDEm7MogYbsbsziDbDcMbkziDbDdl3ZlECYjEsmYDERJAskSQLJEkBmSJIFiSIGMsgMQlZczGWEMpczGMwM4mMuYGUZmOZYFzLmY5iBnmMzDMuYGUZmOYzAyzJmY5jMC5jMmZMwLEmZMwLGZJMwLmSJIFkiSBZIiEpLEQERECxEQhZRJECyxEBERAsREBERASREBJEQEkRAGSIgDJEQEREJIiIQ/9k="
+           alt="Unión Coop." style="height:40px; border-radius:6px; margin-right:4px;">
+      <div class="topbar-info">
+        <div>Unión Coop. — Balanza</div>
+        <div id="topbarSub">cargando...</div>
+      </div>
+    </div>
+    <div class="live-badge"><span class="live-dot"></span> EN VIVO</div>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat">
+      <div class="stat-num" id="statEsperando">0</div>
+      <div class="stat-label">Esperando</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" id="statAtendidos">0</div>
+      <div class="stat-label">Atendidos hoy</div>
+    </div>
+  </div>
+
+  <div class="toolbar">
+    <button class="btn-toolbar btn-siguiente" onclick="siguienteTurno()">▶ Llamar siguiente</button>
+    <button class="btn-toolbar btn-reset" onclick="confirmarReset()">🗑 Resetear cola</button>
+    <span class="last-update" id="lastUpdate"></span>
+  </div>
+
+  <div class="queue-container">
+    <div id="queueList"></div>
+  </div>
+</div>
+
+<!-- Modal Reset -->
+<div class="modal-overlay" id="modalReset">
+  <div class="modal">
+    <div class="modal-icon">⚠️</div>
+    <h2 class="modal-title">¿Resetear la cola?</h2>
+    <p class="modal-sub">Esto eliminará todos los turnos. Los camioneros tendrán que volver a anotarse. No se puede deshacer.</p>
+    <div class="modal-btns">
+      <button class="modal-btn modal-cancel" onclick="cerrarModal()">Cancelar</button>
+      <button class="modal-btn modal-confirm" onclick="resetearCola()">Sí, resetear</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ========== INIT SUPABASE ==========
+  const { createClient } = supabase;
+  const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let pinActual = '';
+
+  // ========== LOGIN ==========
+  function addPin(d) {
+    if (pinActual.length >= 4) return;
+    pinActual += d;
+    actualizarDots();
+    if (pinActual.length === 4) setTimeout(verificarPin, 150);
+  }
+  function delPin() {
+    pinActual = pinActual.slice(0, -1);
+    actualizarDots();
+    document.getElementById('loginError').style.display = 'none';
+  }
+  function actualizarDots() {
+    for (let i = 0; i < 4; i++)
+      document.getElementById(`dot${i}`).className = 'pin-dot' + (i < pinActual.length ? ' filled' : '');
+  }
+  function verificarPin() {
+    if (pinActual === PIN_CORRECTO) {
+      document.getElementById('loginWrap').style.display = 'none';
+      document.getElementById('app').style.display = 'block';
+      iniciarApp();
+    } else {
+      document.getElementById('loginError').style.display = 'block';
+      pinActual = ''; actualizarDots();
+    }
+  }
+
+  // ========== COLA ==========
+  function tiempoEspera(ts) {
+    const mins = Math.floor((Date.now() - ts) / 60000);
+    if (mins < 1)  return 'Recién llegó';
+    if (mins < 60) return `${mins} min`;
+    return `${Math.floor(mins/60)}h ${mins%60}m`;
+  }
+
+  async function renderQueue() {
+    const [{ data: cola }, { count: atendidos }] = await Promise.all([
+      db.from('turnos').select('*').eq('estado','esperando').order('numero', { ascending: true }),
+      db.from('turnos').select('*', { count:'exact', head:true }).eq('estado','atendido')
+    ]);
+
+    const queue = cola || [];
+    document.getElementById('statEsperando').textContent = queue.length;
+    document.getElementById('statAtendidos').textContent = atendidos || 0;
+    document.getElementById('lastUpdate').textContent =
+      'Actualizado ' + new Date().toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+
+    const hora = new Date().toLocaleTimeString('es-AR', { hour:'2-digit', minute:'2-digit' });
+    document.getElementById('topbarSub').textContent =
+      `${queue.length} camión${queue.length !== 1 ? 'es' : ''} esperando · ${hora}`;
+
+    const listEl = document.getElementById('queueList');
+    if (!queue.length) {
+      listEl.innerHTML = `<div class="queue-empty"><div class="queue-empty-icon">✅</div><div>No hay camiones en espera</div></div>`;
+      return;
+    }
+
+    listEl.innerHTML = queue.map((t, idx) => `
+      <div class="turno-card ${idx === 0 ? 'primero' : ''}">
+        <div class="turno-num">${t.numero}</div>
+        <div class="turno-info">
+          <div class="turno-patente">
+            ${t.patente}
+            ${idx === 0 ? '<span class="primero-badge">PRÓXIMO</span>' : ''}
+          </div>
+          <div class="turno-tags">
+            <span class="tag tag-producto">${t.producto}</span>
+            <span class="tag tag-origen">📍 ${t.origen}</span>
+            <span class="tag tag-cpe">CPE: ${t.cpe}</span>
+            <span class="tag tag-tiempo">🕐 ${tiempoEspera(t.timestamp)}</span>
+          </div>
+        </div>
+        <div>
+          <button class="btn-atender" onclick="atenderTurno('${t.id}')">Dar de baja</button>
+        </div>
+      </div>`).join('');
+  }
+
+  async function atenderTurno(id) {
+    await db.from('turnos').update({ estado: 'atendido', atendido_at: Date.now() }).eq('id', id);
+  }
+
+  async function siguienteTurno() {
+    const { data } = await db.from('turnos').select('id, numero, patente')
+      .eq('estado','esperando').order('numero', { ascending: true }).limit(1);
+    if (!data?.length) { alert('No hay camiones en espera.'); return; }
+    const t = data[0];
+    if (confirm(`¿Dar de baja al turno #${t.numero} — ${t.patente}?`)) atenderTurno(t.id);
+  }
+
+  // ========== RESET ==========
+  function confirmarReset() { document.getElementById('modalReset').classList.add('active'); }
+  function cerrarModal()     { document.getElementById('modalReset').classList.remove('active'); }
+  async function resetearCola() {
+    await db.from('turnos').delete().not('id', 'is', null);
+    cerrarModal();
+  }
+
+  // ========== REAL-TIME ==========
+  function suscribirRealtime() {
+    db.channel('cola-balanza')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'turnos' }, () => {
+        renderQueue();
+      }).subscribe();
+  }
+
+  // ========== INICIO ==========
+  function iniciarApp() {
+    renderQueue();
+    suscribirRealtime();
+  }
+
+  document.getElementById('modalReset').addEventListener('click', e => {
+    if (e.target === e.currentTarget) cerrarModal();
+  });
+</script>
+</body>
+</html>
